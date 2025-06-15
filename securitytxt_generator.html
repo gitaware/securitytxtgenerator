@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>security.txt Generator + PGP Signing</title>
+  <script src="https://unpkg.com/openpgp@5.10.1/dist/openpgp.min.js"></script>
+  <style>
+    body { font-family: Arial; padding: 2em; background: #f4f4f4; max-width: 800px; margin: auto; }
+    label { font-weight: bold; margin-top: 1em; display: block; }
+    input, select, textarea, button { width: 100%; margin-top: 0.3em; padding: 0.5em; box-sizing: border-box; }
+    textarea { height: 200px; font-family: monospace; }
+    .row { display: flex; gap: 1em; }
+    .row > div { flex: 1; }
+    .buttons { display: flex; gap: 1em; margin-top: 0.5em; }
+
+    .password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .password-wrapper input {
+      width: 100%;
+      padding-right: 2.5em;
+      padding-left: 0.5em;
+      height: 2.5em;
+      font-size: 1em;
+      box-sizing: border-box;
+    }
+
+    .toggle-visibility {
+      position: absolute;
+      right: 0.5em;
+      cursor: pointer;
+      user-select: none;
+      font-size: 1.2em;
+      color: #444;
+    }
+
+    #toast {
+      visibility: hidden;
+      min-width: 200px;
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      border-radius: 8px;
+      padding: 0.75em 1em;
+      position: fixed;
+      z-index: 9999;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.9em;
+      opacity: 0;
+      transition: opacity 0.3s ease, visibility 0.3s;
+    }
+
+    #toast.show {
+      visibility: visible;
+      opacity: 1;
+    }
+  </style>
+
+  <script>
+  function generateSecurityTxt() {
+    const contact = document.getElementById('contact').value;
+    const expiresInput = document.getElementById('expires').value;
+    const langs = Array.from(document.getElementById('languages').selectedOptions)
+                       .map(opt => opt.value).join(',');
+
+    const expires = expiresInput ? new Date(expiresInput).toISOString().replace(/\.\d+Z$/, 'Z') : '';
+
+    let txt = '';
+    if (contact) txt += `Contact: ${contact}\n`;
+    if (expires) txt += `Expires: ${expires}\n`;
+    if (langs) txt += `Preferred-Languages: ${langs}\n`;
+
+    document.getElementById('securityOutput').value = txt;
+  }
+
+  function setFutureDate(years) {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + years);
+    document.getElementById('expires').value = future.toISOString().slice(0, 16);
+  }
+
+  async function signSecurityTxt() {
+    const armoredPrivateKey = document.getElementById('privateKey').value.trim();
+    const passphrase = document.getElementById('passphrase').value;
+    const message = document.getElementById('securityOutput').value;
+
+    if (!armoredPrivateKey || !message) {
+      alert("Please provide both a private key and a security.txt message.");
+      return;
+    }
+
+    try {
+      const privateKey = await openpgp.readPrivateKey({ armoredKey: armoredPrivateKey });
+
+      let signingKey = privateKey;
+      if (privateKey.isDecrypted() === false) {
+        signingKey = await openpgp.decryptKey({
+          privateKey,
+          passphrase
+        });
+      }
+
+      const signed = await openpgp.sign({
+        message: await openpgp.createCleartextMessage({ text: message }),
+        signingKeys: signingKey
+      });
+
+      document.getElementById('signedOutput').value = signed;
+    } catch (err) {
+      alert("Signing failed: " + err.message);
+    }
+  }
+
+  async function generatePGPKey() {
+    const name = prompt("Enter your name or email for the PGP key:", "security@example.com");
+    if (!name) return;
+
+    const { privateKey } = await openpgp.generateKey({
+      type: 'rsa',
+      rsaBits: 4096,
+      userIDs: [{ name }],
+      passphrase: ''
+    });
+
+    document.getElementById('privateKey').value = privateKey;
+    alert("PGP Key generated. You can now sign your security.txt!");
+  }
+
+  async function downloadPrivateKey() {
+    const armoredPrivateKey = document.getElementById('privateKey').value.trim();
+    const passphrase = document.getElementById('passphrase').value;
+
+    if (!armoredPrivateKey) {
+      alert("No private key found to download.");
+      return;
+    }
+
+    if (!passphrase) {
+      alert("Please enter a passphrase to encrypt the exported private key.");
+      return;
+    }
+
+    try {
+      const privateKey = await openpgp.readPrivateKey({ armoredKey: armoredPrivateKey });
+
+      const encryptedKey = await openpgp.encryptKey({
+        privateKey,
+        passphrase
+      });
+
+      const blob = new Blob([encryptedKey.armor()], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'private-key-encrypted.asc';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Encryption failed: " + err.message);
+    }
+  }
+
+  function generatePassphrase(length = 24) {
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}<>?';
+    let passphrase = '';
+    const randomValues = new Uint32Array(length);
+    crypto.getRandomValues(randomValues);
+
+    for (let i = 0; i < length; i++) {
+      passphrase += charset[randomValues[i] % charset.length];
+    }
+
+    document.getElementById('passphrase').value = passphrase;
+  }
+
+  async function copyPassphrase() {
+    const passInput = document.getElementById('passphrase');
+    const passphrase = passInput.value;
+
+    try {
+      await navigator.clipboard.writeText(passphrase);
+      showToast("✅ Passphrase copied!");
+    } catch (err) {
+      showToast("❌ Failed to copy.");
+    }
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = "show";
+    setTimeout(() => {
+      toast.className = toast.className.replace("show", "");
+    }, 2000);
+  }
+
+  function togglePassphrase() {
+    const passInput = document.getElementById('passphrase');
+    const toggleIcon = document.querySelector('.toggle-visibility');
+
+    if (passInput.type === 'password') {
+      passInput.type = 'text';
+      toggleIcon.textContent = '🙈'; // hide icon
+    } else {
+      passInput.type = 'password';
+      toggleIcon.textContent = '👁️'; // show icon
+    }
+  }
+
+  document.getElementById('keyFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    document.getElementById('privateKey').value = text;
+  });
+  </script>
+</head>
+<body>
+
+<h2>security.txt Generator + PGP Signing</h2>
+
+<form id="secForm">
+  <label>Contact</label>
+  <input type="text" id="contact" placeholder="mailto:security@example.com" />
+
+  <label>Expires</label>
+  <input type="datetime-local" id="expires" />
+  <div class="buttons">
+    <button type="button" onclick="setFutureDate(1)">+1 Year</button>
+    <button type="button" onclick="setFutureDate(2)">+2 Years</button>
+  </div>
+
+  <label>Preferred-Languages</label>
+  <select id="languages" multiple>
+    <option value="en">en</option>
+    <option value="nl">nl</option>
+    <option value="fr">fr</option>
+    <option value="de">de</option>
+    <option value="pt">pt</option>
+  </select>
+
+  <button type="button" onclick="generateSecurityTxt()">📝 Generate security.txt</button>
+  <label>security.txt Output</label>
+  <textarea id="securityOutput"></textarea>
+
+  <label>PGP Options</label>
+  <div class="row">
+    <button type="button" onclick="generatePGPKey()">🔐 Generate New 4096-bit Key</button>
+    <input type="file" accept=".asc" id="keyFile" />
+  </div>
+
+  <label>PGP Private Key (ASCII)</label>
+  <textarea id="privateKey" placeholder="-----BEGIN PGP PRIVATE KEY-----"></textarea>
+
+  <label>Passphrase (if required)</label>
+  <div class="password-wrapper">
+    <input type="password" id="passphrase" />
+    <span class="toggle-visibility" onclick="togglePassphrase()" title="Show/Hide">
+      👁️
+    </span>
+  </div>
+  <button type="button" onclick="copyPassphrase()">📋 Copy Passphrase to Clipboard</button>
+  <button type="button" onclick="generatePassphrase()">🔑 Generate Passphrase</button>
+
+  <button type="button" onclick="downloadPrivateKey()">💾 Download Private Key</button>
+  <button type="button" onclick="signSecurityTxt()">✍️ Sign with PGP</button>
+
+  <label>PGP-Signed security.txt</label>
+  <textarea id="signedOutput" readonly></textarea>
+</form>
+
+
+<div id="toast">Passphrase copied to clipboard!</div>
+</body>
+</html>
+
