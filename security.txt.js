@@ -1,127 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>security.txt Generator + PGP Signing</title>
-  <script src="https://unpkg.com/openpgp@5.10.1/dist/openpgp.min.js"></script>
-  <style>
-    body { font-family: Arial; padding: 2em; background: #f4f4f4; max-width: 800px; margin: auto; }
-    label { font-weight: bold; margin-top: 1em; display: block; }
-    input, select, textarea, button { width: 100%; margin-top: 0.3em; padding: 0.5em; box-sizing: border-box; }
-    textarea { height: 200px; font-family: monospace; }
-    .row { display: flex; gap: 1em; }
-    .row > div { flex: 1; }
-    .buttons { display: flex; gap: 1em; margin-top: 0.5em; }
-
-    .password-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    .password-wrapper input {
-      width: 100%;
-      padding-right: 2.5em;
-      padding-left: 0.5em;
-      height: 2.5em;
-      font-size: 1em;
-      box-sizing: border-box;
-    }
-
-    .toggle-visibility {
-      position: absolute;
-      right: 0.5em;
-      cursor: pointer;
-      user-select: none;
-      font-size: 1.2em;
-      color: #444;
-    }
-
-    #toast {
-      visibility: hidden;
-      min-width: 200px;
-      background-color: #333;
-      color: #fff;
-      text-align: center;
-      border-radius: 8px;
-      padding: 0.75em 1em;
-      position: fixed;
-      z-index: 9999;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 0.9em;
-      opacity: 0;
-      transition: opacity 0.3s ease, visibility 0.3s;
-    }
-
-    #toast.show {
-      visibility: visible;
-      opacity: 1;
-    }
-
-  .required-label {
-    color: red;
-    font-size: 0.8em;
-    margin-left: 0.5em;
-    font-weight: normal;
-  }
-
-  .error-message {
-    color: red;
-    font-size: 0.85em;
-    margin-top: 0.2em;
-    display: none;
-  }
-  input.invalid {
-    border-color: red;
-  }
-
-  .canonical-row {
-    display: flex;
-    gap: 0.5em;
-    align-items: center;
-    margin-bottom: 0.5em;
-  }
-
-  .canonical-row input {
-    flex: 1;
-    padding: 0.5em;
-    font-size: 1em;
-    box-sizing: border-box;
-  }
-
-  .canonical-row button {
-    flex: 0 0 auto;
-    background: none;
-    border: none;
-    color: #c00;
-    font-size: 1.2em;
-    cursor: pointer;
-    padding: 0.3em;
-  }
-
-  .btn-remove-canonical {
-    width: auto; /* natural width */
-    flex: 0 0 auto;
-    padding: 0.3em 0.6em;
-    font-size: 1.2em;
-    cursor: pointer;
-    background: none;
-    border: none;
-    color: #c00;
-    line-height: 1;
-  }
-
-  #canonicalContainer {
-    width: 100%;
-  }
-
-  </style>
-
-  <script>
   const APP_VERSION = 'v 1.1';
   document.addEventListener('DOMContentLoaded', () => {
+
+    document.getElementById('setFutureDate_1').addEventListener('click', function() {
+      setFutureDate(1);
+    });
+    document.getElementById('addContactField').addEventListener('click', addContactField);
+    document.getElementById('addCanonicalField').addEventListener('click', addCanonicalField);
+    document.getElementById('generateSecurityTxt').addEventListener('click', generateSecurityTxt);
+    document.getElementById('generatePGPKey').addEventListener('click', generatePGPKey);
+    document.getElementById('copyPassphrase').addEventListener('click', copyPassphrase);
+    document.getElementById('downloadPrivateKey').addEventListener('click', downloadPrivateKey);
+    document.getElementById('signSecurityTxt').addEventListener('click', signSecurityTxt);
+    document.getElementById('downloadSignedFile').addEventListener('click', downloadSignedFile);
+    document.getElementById('togglePassphrase').addEventListener('click', togglePassphrase);
+
     const splash = document.getElementById('splashModal');
     const footer = document.getElementById('appFooter');
     const splashcontent = `<p>security.txt generator</p><p>For sourcecode see <a href="https://github.com/gitaware/securitytxtgenerator">github</a></p><p>${APP_VERSION} (c)2025 <a href="https://cloudaware.eu">CloudAware.eu</a></p>`;
@@ -134,11 +26,29 @@
       splash.style.display = 'none';
     });
 
+    document.querySelectorAll('.help-icon').forEach(icon => {
+      icon.addEventListener('click', (e) => {
+        const title = e.currentTarget.dataset.helpTitle || "Help";
+        const content = e.currentTarget.dataset.helpContent || "No help available.";
+        
+        document.getElementById('helpModalTitle').textContent = title;
+        document.getElementById('helpModalBody').innerHTML = content;
+        document.getElementById('helpModal').style.display = 'block';
+      });
+    });
+
+    document.getElementById('helpModal').addEventListener('click', () => {
+      document.getElementById('helpModal').style.display = 'none';
+    });
+
+    addContactField(); // ensure at least one contact exists
     addCanonicalField();
   });
 
   function generateSecurityTxt() {
-    const contact = document.getElementById('contact').value.trim();
+    const contacts = Array.from(document.querySelectorAll('#contactContainer input'))
+                          .map(input => input.value.trim())
+                          .filter(val => val !== '');
     const expiresInput = document.getElementById('expires').value;
     const langs = Array.from(document.getElementById('languages').selectedOptions)
                        .map(opt => opt.value).join(',');
@@ -149,7 +59,7 @@
 
     // Validation
     const errors = [];
-    if (!contact) errors.push("Contact is required.");
+    if (contacts.length === 0) errors.push("At least one contact is required.");
     if (!expiresInput) errors.push("Expires is required.");
 
     canonicals.forEach((url, index) => {
@@ -171,7 +81,9 @@
     const expires = new Date(expiresInput).toISOString().replace(/\.\d+Z$/, 'Z');
 
     let txt = '';
-    if (contact) txt += `Contact: ${contact}\n`;
+    contacts.forEach(contact => {
+      txt += `Contact: ${contact}\n`;
+    });
     if (expires) txt += `Expires: ${expires}\n`;
     if (langs) txt += `Preferred-Languages: ${langs}\n`;
     canonicals.forEach(url => {
@@ -214,6 +126,11 @@
       });
 
       document.getElementById('signedOutput').value = signed;
+
+      document.getElementById('helpModalTitle').textContent = "Document signed";
+      document.getElementById('helpModalBody').innerHTML = "The security.txt document has successfully been signed!";
+      document.getElementById('helpModal').style.display = 'block';
+
     } catch (err) {
       alert("Signing failed: " + err.message);
     }
@@ -231,7 +148,7 @@
     });
 
     document.getElementById('privateKey').value = privateKey;
-    alert("PGP Key generated. You can now sign your security.txt!");
+    showToast("✅ PGP Key generated! You can now sign your security.txt.");
     generatePassphrase();
   }
 
@@ -327,6 +244,42 @@
     URL.revokeObjectURL(url);
   }
 
+  function addContactField(value = '') {
+    const container = document.getElementById('contactContainer');
+    const row = document.createElement('div');
+    row.className = 'canonical-row'; // reuse same styling
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'mailto:security@example.com';
+    //input.value = value;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.innerHTML = '🗑️';
+    removeBtn.title = 'Remove';
+    removeBtn.className = 'btn-remove-canonical';
+    removeBtn.onclick = () => {
+      if (container.children.length > 1) {
+        container.removeChild(row);
+        toggleTrashVisibilityForContacts();
+      }
+    };
+
+    row.appendChild(input);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+    toggleTrashVisibilityForContacts();
+  }
+
+  function toggleTrashVisibilityForContacts() {
+    const rows = document.querySelectorAll('#contactContainer .canonical-row');
+    rows.forEach((row, index) => {
+      const btn = row.querySelector('button');
+      btn.style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+    });
+  }
+
   function addCanonicalField(value = '') {
     const container = document.getElementById('canonicalContainer');
     const row = document.createElement('div');
@@ -335,7 +288,7 @@
     const input = document.createElement('input');
     input.type = 'url';
     input.placeholder = 'https://example.com/.well-known/security.txt';
-    input.value = value;
+    //input.value = value;
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -369,85 +322,4 @@
     const text = await file.text();
     document.getElementById('privateKey').value = text;
   });
-  </script>
-</head>
-<body>
-<div id="splashModal" style="
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0, 0, 0, 0.75);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5em;
-  z-index: 10000;
-  text-align: center;
-  padding: 2em;
-  cursor: pointer;
-"></div>
-
-<h2>security.txt Generator + PGP Signing</h2>
-
-<form id="secForm">
-  <label>Contact <span class="required-label">required</span></label>
-  <input type="text" id="contact" required placeholder="mailto:security@example.com" />
-  <div id="contactError" class="error-message">Contact is required.</div>
-
-  <label>Expires <span class="required-label">required</span></label>
-  <input type="datetime-local" required id="expires" />
-  <div id="expiresError" class="error-message">Expires date is required.</div>
-  <div class="buttons">
-    <button type="button" onclick="setFutureDate(1)">+1 Year</button>
-  </div>
-
-  <label>Preferred-Languages</label>
-  <select id="languages" multiple>
-    <option value="en">en</option>
-    <option value="nl">nl</option>
-    <option value="fr">fr</option>
-    <option value="de">de</option>
-    <option value="pt">pt</option>
-  </select>
-
-  <label>Canonical <small style="color: red;">(optional, must end in <code>security.txt</code>)</small></label>
-  <div id="canonicalContainer"></div>
-  <button type="button" onclick="addCanonicalField()">➕ Add Canonical</button>
-
-  <button type="button" onclick="generateSecurityTxt()">📝 Generate security.txt</button>
-  <label>security.txt Output</label>
-  <textarea id="securityOutput"></textarea>
-
-  <label>PGP Options</label>
-  <div class="row">
-    <button type="button" onclick="generatePGPKey()">🔐 Generate New 4096-bit Key</button>
-    <input type="file" accept=".asc" id="keyFile" />
-  </div>
-
-  <label>PGP Private Key (ASCII)</label>
-  <textarea id="privateKey" placeholder="-----BEGIN PGP PRIVATE KEY-----"></textarea>
-
-  <label>Passphrase (do not loose!)</label>
-  <div class="password-wrapper">
-    <input type="password" id="passphrase" />
-    <span class="toggle-visibility" onclick="togglePassphrase()" title="Show/Hide">
-      👁️
-    </span>
-  </div>
-  <button type="button" onclick="copyPassphrase()">📋 Copy Passphrase to Clipboard</button>
-  <!--<button type="button" onclick="generatePassphrase()">🔑 Generate Passphrase</button> //-->
-
-  <button type="button" onclick="downloadPrivateKey()">💾 Download Private Key</button>
-  <button type="button" onclick="signSecurityTxt()">✍️ Sign with PGP</button>
-
-  <label>PGP-Signed security.txt</label>
-  <textarea id="signedOutput" readonly></textarea>
-  <button type="button" onclick="downloadSignedFile()">📄 Download Signed File</button>
-</form>
-
-
-<div id="toast">Passphrase copied to clipboard!</div>
-<footer id="appFooter" style="text-align: center; margin-top: 3em; font-size: 0.9em; color: #666;"></footer>
-</body>
-</html>
 
