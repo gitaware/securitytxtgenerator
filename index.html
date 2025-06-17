@@ -247,6 +247,17 @@
   <div id="canonicalContainer"></div>
   <button type="button" id="addCanonicalField">➕ Add Canonical</button>
 
+  <label for="policy">Policy
+      <span 
+      class="help-icon" 
+      title="Help"
+      data-help-title="Policy Field Help"
+      data-help-content="
+        A link to a policy detailing what security researchers should do when searching for or reporting security issues. Remember to include &quot;https://&quot;.
+      ">?</span>
+    <small style="color: red;">(optional)></label>
+  <input type="url" id="policy" name="policy" placeholder="https://example.com/policy" />
+
   <button type="button" id="generateSecurityTxt">📝 Generate security.txt</button>
   <label>security.txt Output</label>
   <textarea id="securityOutput"></textarea>

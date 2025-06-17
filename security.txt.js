@@ -50,6 +50,7 @@
     const contacts = Array.from(document.querySelectorAll('#contactContainer input'))
                           .map(input => input.value.trim())
                           .filter(val => val !== '');
+    const policyInput = document.getElementById('policy').value;
     const expiresInput = document.getElementById('expires').value;
     const langs = Array.from(document.getElementById('languages').selectedOptions)
                        .map(opt => opt.value).join(',');
@@ -90,6 +91,7 @@
     canonicals.forEach(url => {
       txt += `Canonical: ${url}\n`;
     });
+    if (policyInput) txt += `Policy: ${policyInput}\n`;
 
     document.getElementById('securityOutput').value = txt;
   }
