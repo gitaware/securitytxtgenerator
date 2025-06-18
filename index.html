@@ -247,6 +247,18 @@
   <div id="canonicalContainer"></div>
   <button type="button" id="addCanonicalField">➕ Add Canonical</button>
 
+  <label for="encryption">Encryption
+    <span 
+      class="help-icon" 
+      title="Help"
+      data-help-title="Encryption Field Help"
+      data-help-content="
+        A link to an encryption key (such as a PGP public key) that security researchers can use to securely report vulnerabilities. Remember to include &quot;https://&quot;.
+      ">?</span>
+    <small style="color: red;">(optional)</small>
+  </label>
+  <input type="url" id="encryption" name="encryption" placeholder="https://example.com/pgp-key.asc" />
+
   <label for="policy">Policy
       <span 
       class="help-icon" 
@@ -255,7 +267,7 @@
       data-help-content="
         A link to a policy detailing what security researchers should do when searching for or reporting security issues. Remember to include &quot;https://&quot;.
       ">?</span>
-    <small style="color: red;">(optional)></label>
+    <small style="color: red;">(optional)</label>
   <input type="url" id="policy" name="policy" placeholder="https://example.com/policy" />
 
   <button type="button" id="generateSecurityTxt">📝 Generate security.txt</button>
