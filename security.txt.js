@@ -1,4 +1,4 @@
-  const APP_VERSION = 'v1.3';
+  const APP_VERSION = 'v1.4';
   document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('setFutureDate_1').addEventListener('click', function() {
@@ -49,8 +49,56 @@
       document.getElementById('helpModal').style.display = 'none';
     });
 
+    // Clear signedOutput when relevant fields change
+    function attachSignedOutputInvalidators() {
+      const invalidateSignedOutput = () => {
+        document.getElementById('signedOutput').value = '';
+      };
+
+      // Contacts
+      const contactObserver = new MutationObserver(() => {
+        document.querySelectorAll('#contactContainer input').forEach(el =>
+          el.addEventListener('input', invalidateSignedOutput)
+        );
+      });
+      contactObserver.observe(document.getElementById('contactContainer'), { childList: true, subtree: true });
+      document.querySelectorAll('#contactContainer input').forEach(el =>
+        el.addEventListener('input', invalidateSignedOutput)
+      );
+
+      // Canonicals
+      const canonicalObserver = new MutationObserver(() => {
+        document.querySelectorAll('#canonicalContainer input').forEach(el =>
+          el.addEventListener('input', invalidateSignedOutput)
+        );
+      });
+      canonicalObserver.observe(document.getElementById('canonicalContainer'), { childList: true, subtree: true });
+      document.querySelectorAll('#canonicalContainer input').forEach(el =>
+        el.addEventListener('input', invalidateSignedOutput)
+      );
+
+      // Static fields
+      [
+        'expires',
+        'languages',
+        'encryption',
+        'policy',
+        'privateKey',
+        'passphrase',
+        'securityOutput'
+      ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', invalidateSignedOutput);
+          el.addEventListener('change', invalidateSignedOutput); // for select/multiselects
+        }
+      });
+    }
+
     addContactField(); // ensure at least one contact exists
     addCanonicalField();
+
+    attachSignedOutputInvalidators();
   });
 
   function generateSecurityTxt() {
@@ -324,8 +372,19 @@
     }
   }
 
-  function downloadSignedFile() {
-    const signed = document.getElementById('signedOutput').value;
+  async function downloadSignedFile() {
+    const outputField = document.getElementById('signedOutput');
+
+    if (!outputField.value.trim()) {
+      await signSecurityTxt(); // attempt regeneration
+    }
+
+    if (!outputField.value.trim()) {
+      showToast("❌ Signing failed or cancelled. Cannot download.");
+      return;
+    }
+
+    const signed = outputField.value;
     const blob = new Blob([signed], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
